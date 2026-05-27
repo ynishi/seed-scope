@@ -1,0 +1,39 @@
+# algocline — full narrative index
+
+> Concatenation of every package narrative. Intended for bulk AI context injection; for selective access see `llms.txt`.
+
+<!-- ── bandit.md ── -->
+
+
+# Thompson Sampling engine for multi-armed bandit optimization.
+
+> Pure math + optional LLM rationale. No conglo-specific logic.
+
+---
+
+<!-- ── portfolio.md ── -->
+
+
+# Portfolio state management: CRUD, eval history, fingerprinting, Card emission.
+
+> Single gateway for all persistent state and Card operations.
+
+---
+
+<!-- ── screener.md ── -->
+
+
+# Idea screener: fingerprint dedup + rule filter + LLM batch screening.
+
+_(no additional narrative found)_
+
+---
+
+<!-- ── sourcer.md ── -->
+
+
+# Idea sourcer: extract ideas from raw web signals via Thompson Sampling.
+
+> Manages sourcing arms (themes/categories) with bandit optimization.
+
+---

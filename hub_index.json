@@ -1,0 +1,110 @@
+{
+  "schema_version": "hub_index/v0",
+  "updated_at": "2026-05-27T16:42:53Z",
+  "packages": [
+    {
+      "name": "bandit",
+      "version": "0.1.0",
+      "description": "Thompson Sampling with Beta-Binomial model",
+      "category": "optimization",
+      "docstring": "Thompson Sampling engine for multi-armed bandit optimization.\nPure math + optional LLM rationale. No conglo-specific logic.",
+      "tags": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "designer",
+      "version": "0.1.0",
+      "description": "MVP spec generator with competitive positioning",
+      "category": "composite",
+      "docstring": "MVP designer: competitive analysis → differentiation → form factor → spec.\nOutputs a validated MVP spec ready for Vibe Coding.",
+      "tags": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "evaluator",
+      "version": "0.1.0",
+      "description": "Multi-persona idea evaluation with EV scoring and telemetry grounding",
+      "category": "composite",
+      "docstring": "Idea evaluator: 5-persona debate + self-consistency scoring + EV calculation.\nProduces SCAFFOLD/KILL decision with metrics and kill_reasons.\nSupports re_evaluate mode: ground LLM metrics with real telemetry.",
+      "tags": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "portfolio",
+      "version": "0.1.0",
+      "description": "Portfolio store with eval history and Card emission",
+      "category": "infrastructure",
+      "docstring": "Portfolio state management: CRUD, eval history, fingerprinting, Card emission.\nSingle gateway for all persistent state and Card operations.",
+      "tags": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "screener",
+      "version": "0.1.0",
+      "description": "Multi-stage idea filter: dedup, rules, LLM screen",
+      "category": "filter",
+      "docstring": "Idea screener: fingerprint dedup + rule filter + LLM batch screening.",
+      "tags": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "seed_scope_orch",
+      "version": "0.1.0",
+      "description": "Idea validation pipeline orchestrator (SwarmFrame)",
+      "category": "orchestrator",
+      "docstring": "SeedScope orchestrator: SwarmFrame-based pipeline.\nsource → screen → bundle → evaluate → simulate → design → record\n\nALL modes go through the same frame.run_linear pipeline.\nMode difference = which steps are pre-completed + initial state setup.",
+      "tags": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "simulator",
+      "version": "0.1.0",
+      "description": "Market simulation with incumbent analysis and ABM Monte Carlo",
+      "category": "composite",
+      "docstring": "Market simulator: incumbent analysis + agent-based market simulation.\nOutputs survival_rate, equilibrium position, expected lifetime.\nUses abm bundled (Agent/Model/mc) for Monte Carlo market sim.",
+      "tags": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    },
+    {
+      "name": "sourcer",
+      "version": "0.1.0",
+      "description": "Thompson Sampling idea sourcer with theme/source arms",
+      "category": "sourcing",
+      "docstring": "Idea sourcer: extract ideas from raw web signals via Thompson Sampling.\nManages sourcing arms (themes/categories) with bandit optimization.",
+      "tags": null,
+      "source": {
+        "type": "unknown"
+      },
+      "card_count": 0,
+      "best_card": null
+    }
+  ]
+}

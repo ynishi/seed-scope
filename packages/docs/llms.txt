@@ -1,0 +1,19 @@
+# algocline
+
+> LLM amplification engine. Pure Lua strategies executed via `alc.run(ctx)`; this index lists every installed strategy package with a one-liner and a link to its full narrative.
+
+## filter
+
+- [screener](narrative/screener.md): Multi-stage idea filter: dedup, rules, LLM screen
+
+## infrastructure
+
+- [portfolio](narrative/portfolio.md): Portfolio store with eval history and Card emission
+
+## optimization
+
+- [bandit](narrative/bandit.md): Thompson Sampling with Beta-Binomial model
+
+## sourcing
+
+- [sourcer](narrative/sourcer.md): Thompson Sampling idea sourcer with theme/source arms

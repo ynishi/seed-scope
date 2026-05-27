@@ -1,0 +1,46 @@
+[collection]
+name = "seed-scope"
+version = "0.1.0"
+description = "AI-native idea validation pipeline — from raw signal to validated MVP spec"
+repository = "https://github.com/ynishi/seed-scope"
+license = "MIT OR Apache-2.0"
+
+[collection.packages]
+seed_scope_orch = { path = "packages/seed_scope_orch" }
+sourcer = { path = "packages/sourcer" }
+screener = { path = "packages/screener" }
+evaluator = { path = "packages/evaluator" }
+simulator = { path = "packages/simulator" }
+designer = { path = "packages/designer" }
+portfolio = { path = "packages/portfolio" }
+bandit = { path = "packages/bandit" }
+
+# External dependencies (install before linking seed-scope packages):
+#   alc pkg install github.com/ynishi/algocline-bundled-packages
+#
+# Required bundled packages:
+#   panel       — evaluator, designer (multi-persona debate)
+#   calibrate   — evaluator, simulator (probability calibration)
+#   contrastive — simulator (incumbent analysis)
+#   abm         — simulator (Agent/Model/mc Monte Carlo)
+#   deliberate  — designer (structured deliberation)
+#   flow        — seed_scope_orch (flow state persistence)
+#   swarm_frame — seed_scope_orch (step-based pipeline)
+#   swarm_frame_algocline — seed_scope_orch (SwarmFrame adapter)
+
+[hub]
+name = "seed-scope"
+description = """\
+AI-native idea validation pipeline for solo developers. \
+8 Lua packages orchestrated by SwarmFrame: Thompson Sampling sourcing, \
+5-persona panel debate, ABM Monte Carlo market simulation, \
+structured deliberation, and MVP spec generation. \
+Built entirely on algocline bundled packages."""
+
+  [hub.context7]
+  extra_rules = [
+      "SeedScope is a pure Lua collection running on the algocline LLM amplification engine.",
+      "All 8 packages follow the alc.run(ctx) convention with M.meta and M.run entry points.",
+      "External bundled dependencies: panel, calibrate, contrastive, abm, deliberate, flow, swarm_frame, swarm_frame_algocline.",
+      "4 modes: ingest (full pipeline), evaluate (single idea), re_evaluate (telemetry grounding), status (read-only).",
+  ]
