@@ -150,15 +150,71 @@ local function handle_design(ctx, _spec)
     local sim_survivors = ctx.state:get("sim_survivors") or {}
     if #sim_survivors == 0 then return "DONE path=ok" end
 
+    -- Resolve task_dir for spec file offloading (avoid MCP result overflow).
+    -- Priority:
+    --   1. ctx.project_root (caller explicit — most reliable)
+    --   2. ALC_PROJECT_ROOT env var (algocline / shell environment)
+    --   3. PWD (runtime CWD — best-effort for agent contexts)
+    --   4. nil → inline fallback (file write skipped, warn logged)
+    -- $HOME-based heuristic was removed: it breaks on other users' machines.
+    local task_id   = ctx.state:get("task_id") or "seedscope-default"
+    local namespace = ctx.state:get("namespace") or "default"
+    local project_root = ctx.project_root
+    if not project_root or project_root == "" then
+        project_root = os.getenv("ALC_PROJECT_ROOT")
+    end
+    if not project_root or project_root == "" then
+        project_root = os.getenv("PWD")
+        if project_root and project_root ~= "" then
+            alc.log("info", "seed_scope_orch/design: ctx.project_root unset, using PWD: " .. project_root)
+        end
+    end
+    if not project_root or project_root == "" then
+        alc.log("warn", "seed_scope_orch/design: ctx.project_root unset and no fallback env available; spec will be inline")
+        project_root = nil
+    end
+
+    -- Build task_dir: {project_root}/workspace/tasks/{task_id}-{namespace}/
+    -- Skip when project_root is unavailable (all fallbacks exhausted above).
+    local task_dir
+    if project_root then
+        local candidate = project_root .. "/workspace/tasks/" .. task_id .. "-" .. namespace
+        local mkdir_ok = os.execute("mkdir -p '" .. candidate .. "'")
+        if mkdir_ok then
+            task_dir = candidate
+        else
+            alc.log("warn", "seed_scope_orch/design: mkdir failed for " .. candidate .. "; spec will be inline")
+        end
+    end
+
     local designs = {}
     for i, entry in ipairs(sim_survivors) do
         alc.log("info", string.format("seed_scope_orch/design: %d/%d", i, #sim_survivors))
-        local design_ctx = designer.run({ task = entry.candidate.text })
+        -- Pass idea-specific task_dir to designer so each spec gets its own file.
+        local idea_task_dir = task_dir and (task_dir .. "/spec_" .. i) or nil
+        if idea_task_dir then
+            os.execute("mkdir -p '" .. idea_task_dir .. "'")
+        end
+        local design_ctx = designer.run({
+            task     = entry.candidate.text,
+            task_dir = idea_task_dir,
+        })
+        local dr = design_ctx.result or {}
         designs[#designs + 1] = {
-            candidate = entry.candidate,
-            eval_result = entry.eval_result,
-            sim_result = entry.sim_result,
-            design = design_ctx.result,
+            candidate    = entry.candidate,
+            eval_result  = entry.eval_result,
+            sim_result   = entry.sim_result,
+            -- Slim design: drop full spec inline; carry path + summary instead.
+            design = {
+                competitors       = dr.competitors,
+                weakness_analysis = dr.weakness_analysis,
+                features          = dr.features,
+                decision          = dr.decision,
+                spec_path         = dr.spec_path,
+                spec_summary      = dr.spec_summary,
+                -- inline spec only present when file write failed (fallback)
+                spec              = dr.spec,
+            },
         }
     end
 

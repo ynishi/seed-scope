@@ -248,8 +248,34 @@ function M.run(ctx)
         ))
     end
 
+    local spec_path = nil
+    local spec_summary = nil
+
     if is_scaffold then
         spec = generate_spec(idea, features, competitors, weakness_analysis)
+
+        -- Attempt to write spec to task_dir to avoid inline payload overflow.
+        local task_dir = ctx.task_dir
+        if task_dir and type(task_dir) == "string" and #task_dir > 0 then
+            local out_path = task_dir .. "/spec.md"
+            local ok, fh_or_err = pcall(function()
+                local fh, err = io.open(out_path, "wb")
+                if not fh then error(err or "io.open failed") end
+                fh:write(tostring(spec))
+                fh:close()
+            end)
+            if ok then
+                spec_path = out_path
+                -- spec_summary: first ~500 chars of spec as preview
+                spec_summary = type(spec) == "string" and spec:sub(1, 500) or nil
+                spec = nil  -- drop full inline payload
+                alc.log("info", "designer: spec written to " .. out_path)
+            else
+                alc.log("warn", "designer: spec file write failed, falling back to inline: " .. tostring(fh_or_err))
+            end
+        else
+            alc.log("warn", "designer: ctx.task_dir not set, spec returned inline")
+        end
     end
 
     ctx.result = {
@@ -257,7 +283,9 @@ function M.run(ctx)
         weakness_analysis = weakness_analysis,
         features = features,
         decision = decision,
-        spec = spec,
+        spec = spec,           -- nil when spec_path is set; inline fallback otherwise
+        spec_path = spec_path,
+        spec_summary = spec_summary,
     }
 
     alc.log("info", "designer: complete")
