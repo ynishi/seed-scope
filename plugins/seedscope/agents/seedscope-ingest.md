@@ -1,7 +1,7 @@
 ---
 name: seedscope-ingest
 description: Run SeedScope full ingest pipeline (source → screen → evaluate → simulate → design) via alc MCP tools.
-tools: WebSearch, WebFetch, mcp__alc__alc_run, mcp__alc__alc_continue
+tools: WebSearch, WebFetch, mcp__algocline__alc_run, mcp__algocline__alc_continue
 model: sonnet
 ---
 

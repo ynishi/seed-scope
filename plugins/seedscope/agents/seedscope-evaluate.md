@@ -1,7 +1,7 @@
 ---
 name: seedscope-evaluate
 description: Run SeedScope single idea evaluation via alc MCP tools. Thin wrapper that drives the alc_run/alc_continue loop.
-tools: WebSearch, WebFetch, mcp__alc__alc_run, mcp__alc__alc_continue
+tools: WebSearch, WebFetch, mcp__algocline__alc_run, mcp__algocline__alc_continue
 model: sonnet
 ---
 

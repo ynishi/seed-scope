@@ -1,0 +1,12 @@
+{
+  "name": "seedscope",
+  "version": "0.1.0",
+  "description": "SeedScope idea-validation agents (evaluate / ingest) driving the algocline alc_run loop. Requires algocline MCP installed separately.",
+  "author": {
+    "name": "Yutaka Nishimura"
+  },
+  "homepage": "https://github.com/ynishi/seed-scope",
+  "repository": "https://github.com/ynishi/seed-scope",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["algocline", "lua", "llm", "agents", "idea-validation", "mvp"]
+}

@@ -50,8 +50,8 @@ SeedScope demonstrates what you can build with algocline's bundled packages alon
 # Install algocline
 cargo install algocline
 
-# Link all packages at once
-for pkg in packages/*/; do alc pkg link "$pkg"; done
+# Link the whole collection at once (collection mode — one call links every package)
+alc pkg link packages
 
 # Evaluate a single idea
 alc run '
@@ -139,6 +139,37 @@ for spec in packages/*/spec/*_spec.lua; do
     alc pkg test --code-file "$spec" --search-paths packages/
 done
 ```
+
+## Claude Code Agents (plugin)
+
+The examples above drive the pipeline from the `alc` CLI. To run it from inside
+Claude Code instead, SeedScope ships two subagents as a Claude Code plugin
+(`plugins/seedscope/`):
+
+| agent | mode |
+|---|---|
+| `seedscope-evaluate` | single-idea evaluate (SCAFFOLD/KILL + EV) |
+| `seedscope-ingest`   | full pipeline from raw signal posts |
+
+The plugin carries **agent definitions only** — algocline is a prerequisite, not
+bundled. The agents call `mcp__algocline__alc_run` / `alc_continue`, which resolve
+against your separately-installed algocline MCP server (registered under the
+`algocline` alias).
+
+```bash
+# 1. Install algocline and register its MCP as alias "algocline", then link packages
+cargo install algocline
+alc pkg link packages
+
+# 2. Add this repo as a plugin marketplace and install the plugin
+/plugin marketplace add ynishi/seed-scope
+/plugin install seedscope@seed-scope
+
+# 3. Restart Claude Code (new installs apply on restart)
+```
+
+Then dispatch the agent (e.g. via the Task tool) with an idea or raw posts. See
+[plugins/seedscope/README.md](plugins/seedscope/README.md) for details.
 
 ## License
 
