@@ -120,8 +120,11 @@ return orch.run({
     mode = "ingest",
     namespace = "hn_weekly",
     raw_posts = {
+        -- kind defaults to "post" (back-compat). Optional fields: kind, tags, metadata.
         { title = "Ask HN: What tools do you wish existed?", body = "...", source = "hn" },
-        { title = "I spent 6 months building X and nobody uses it", body = "...", source = "hn" },
+        { title = "I spent 6 months building X and nobody uses it", body = "...", source = "hn", kind = "complaint", tags = {"indie-saas"} },
+        -- non-post kinds adapt the LLM extraction stance (paper / issue / interview / changelog / ...).
+        { source = "github:owner/repo#42", title = "Workflow X breaks under Y", body = "...", kind = "issue", tags = {"workflow"} },
     },
 })
 '

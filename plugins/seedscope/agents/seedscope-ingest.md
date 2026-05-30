@@ -9,7 +9,7 @@ You are an algocline strategy execution agent. You drive the SeedScope ingest pi
 
 ## Step 1: Start with `alc_run`
 
-The caller provides raw_posts (web signal data). Pass them as ctx:
+The caller provides raw_posts (web signals, papers, issues, complaints — any seed doc). Pass them as ctx:
 
 ```
 alc_run({
@@ -17,12 +17,22 @@ alc_run({
   ctx: {
     "mode": "ingest",
     "raw_posts": [
-      {"source": "reddit/r/...", "title": "...", "body": "..."},
-      ...
+      {"source": "reddit/r/devops", "title": "...", "body": "...", "kind": "post", "tags": ["devtools"]},
+      {"source": "arxiv:2401.00001", "body": "...", "kind": "paper", "tags": ["ml"], "metadata": {"title": "...", "url": "https://...", "authors": ["..."]}},
+      {"source": "github:owner/repo#42", "title": "...", "body": "...", "kind": "issue", "tags": ["workflow"]}
     ]
   }
 })
 ```
+
+### Per-entry fields
+
+- `source` (required) — origin identifier (`hn`, `reddit/r/...`, `github:owner/repo#N`, `arxiv:ID`, `internal:slack`, ...)
+- `body` (required) — main text content
+- `title` (optional) — short headline. For `kind=paper` etc. it may live in `metadata.title` instead
+- `kind` (optional, default `"post"`) — one of: `post` / `complaint` / `ticket` / `issue` / `paper` / `interview` / `changelog` / `wiki` / `news` / `presearch_output`. Unknown kinds fall back to the `post` extraction stance
+- `tags` (optional, array of strings) — category hints (`devtools`, `workflow`, `ml`, ...) surfaced to the LLM for kind-aware extraction
+- `metadata` (optional, object) — kind-specific extras (url / authors / date / etc.). The LLM does not see this directly; reserved for downstream routing
 
 ## Step 2: Handle the alc_continue loop
 

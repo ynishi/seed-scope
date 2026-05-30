@@ -30,34 +30,78 @@ function M.save_state(state, ns)
     alc.state.set(key, state)
 end
 
---- Extract ideas from raw posts via LLM.
+--- Per-kind extraction focus hints injected into the LLM prompt.
+--- Each entry maps an input kind to a 1-line guidance string. Unknown kinds
+--- fall back to the "post" stance (pain / complaint extraction).
+M.KIND_FOCUS = {
+    post             = "pain points, unmet needs, workflow inefficiencies, complaints about existing tools",
+    complaint        = "explicit pain language, frustration phrases, workarounds users built themselves",
+    ticket           = "recurring support friction, repeated bug categories, user confusion patterns",
+    issue            = "reported bugs, feature requests, workflow gaps in existing tools",
+    paper            = "novel methods or evaluated benefits — who would pay for this productized",
+    interview        = "jobs-to-be-done, unstated needs revealed by behavior or context",
+    changelog        = "shipped features as evidence of gaps that prompted them",
+    wiki             = "documented procedures as evidence of implicit friction or undocumented pain",
+    news             = "emerging trends, new tooling gaps, market shifts",
+    presearch_output = "pre-curated signals — extract ideas verbatim, do not re-interpret",
+}
+
+--- Extract ideas from raw posts (a.k.a. seed docs) via LLM.
+--- Each entry accepts: { source, title?, body, kind?, tags?, metadata? }.
+--- `kind` defaults to "post" (back-compat). `tags` is an array of strings.
+--- `metadata` is a kind-specific extras namespace (e.g. url / authors / date).
 function M.extract(raw_posts)
     if not raw_posts or #raw_posts == 0 then
         return {}
     end
 
+    local seen_kinds, kinds_order = {}, {}
     local posts_text = {}
     for i, post in ipairs(raw_posts) do
+        local kind = post.kind or "post"
+        if not seen_kinds[kind] then
+            seen_kinds[kind] = true
+            kinds_order[#kinds_order + 1] = kind
+        end
+        local tags_str = ""
+        if post.tags and #post.tags > 0 then
+            tags_str = "|tags=" .. table.concat(post.tags, ",")
+        end
+        local title = post.title
+            or (post.metadata and post.metadata.title)
+            or ""
         posts_text[#posts_text + 1] = string.format(
-            "%d. [%s] %s\n%s",
+            "%d. [%s|kind=%s%s] %s\n%s",
             i,
             post.source or "unknown",
-            post.title or "",
+            kind,
+            tags_str,
+            title,
             (post.body or ""):sub(1, 500)
         )
     end
 
-    local prompt = string.format([[Extract micro-SaaS product ideas from these posts.
-Focus on: pain points, unmet needs, workflow inefficiencies, complaints about existing tools.
+    local focus_lines = {}
+    for _, k in ipairs(kinds_order) do
+        focus_lines[#focus_lines + 1] = string.format(
+            "- %s: %s", k, M.KIND_FOCUS[k] or M.KIND_FOCUS.post
+        )
+    end
 
-POSTS:
+    local prompt = string.format([[Extract micro-SaaS product ideas from these inputs.
+Each input is prefixed [source|kind=<kind>|tags=<tags>] — adapt extraction to the kind.
+
+Per-kind extraction focus:
+%s
+
+INPUTS:
 %s
 
 For each idea found, return:
-[{"text": "Clear 1-2 sentence idea description", "source_post": <index>, "pain_signal": "the specific pain/complaint"}]
+[{"text": "Clear 1-2 sentence idea description", "source_post": <index>, "pain_signal": "the specific pain/complaint/need"}]
 
 If no viable ideas found, return empty array: []
-Return ONLY valid JSON array.]], table.concat(posts_text, "\n\n"))
+Return ONLY valid JSON array.]], table.concat(focus_lines, "\n"), table.concat(posts_text, "\n\n"))
 
     local raw = alc.llm(prompt, {
         system = "You are an idea extractor for a solo micro-SaaS developer. Output ONLY valid JSON array.",
