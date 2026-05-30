@@ -172,13 +172,13 @@ function M.score_lens(ctx)
         local parsed = alc.json_extract(raw)
         if parsed and validate_metrics(parsed) then
             valid_samples[#valid_samples + 1] = parsed
-            alc.log("info", string.format(
+            alc.log_fmt("info",
                 "evaluator: lens %d/%d — Pain=%d WTP=%d PR=%s Def=%d SSF=%d T=%dd",
                 i, #lenses,
                 parsed.Pain_level, parsed.Willingness_to_Pay,
                 tostring(parsed.Purchase_Realism or "nil"),
                 parsed.Defensibility, parsed.Self_Serve_Fit, parsed.Time_to_MVP
-            ))
+            )
         else
             alc.log("warn", string.format("evaluator: lens %d/%d invalid", i, #lenses))
         end

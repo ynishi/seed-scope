@@ -27,6 +27,7 @@ if not _G.alc then
             end,
         },
         log = function() end,
+        log_fmt = function() end,
     }
 end
 

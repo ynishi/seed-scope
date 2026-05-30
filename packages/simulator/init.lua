@@ -176,14 +176,14 @@ function M.run(ctx)
     local median_revenue = sim.final_revenue_median or 0
     local median_users = sim.final_users_median or 0
 
-    alc.log("info", string.format(
+    alc.log_fmt("info",
         "simulator: survival=%.1f%% [%.1f-%.1f CI] equilibrium=%s revenue=$%d users=%d",
         survival_rate * 100,
         (sim.survived_ci and sim.survived_ci.lower or 0) * 100,
         (sim.survived_ci and sim.survived_ci.upper or 0) * 100,
         tostring(equilibrium),
         median_revenue, median_users
-    ))
+    )
 
     -- Kill gate
     local kill = survival_rate < cfg.kill_threshold

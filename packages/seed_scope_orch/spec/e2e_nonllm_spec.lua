@@ -19,6 +19,7 @@ local function install_stubs(store)
             set = function(k, v) store[k] = v end,
         },
         log = function() end,
+        log_fmt = function() end,
         time = function() return 1000000 end,
         fingerprint = function(text)
             local h = 5381
