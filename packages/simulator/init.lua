@@ -188,9 +188,43 @@ function M.run(ctx)
     -- Kill gate
     local kill = survival_rate < cfg.kill_threshold
 
+    -- Offload simulation (ABM trajectory: per-tick stats / agent counts) to
+    -- file when ctx.task_dir is provided. Avoids MCP result overflow.
+    local sim_path, sim_summary, sim_inline = nil, nil, sim
+    if ctx.task_dir and type(ctx.task_dir) == "string" and #ctx.task_dir > 0 then
+        local ok_sf, frame = pcall(require, "swarm_frame")
+        if ok_sf and frame.artifact_store and frame.backend_artifact_file then
+            local ok_off, rel_or_err = pcall(function()
+                local backend = frame.backend_artifact_file({ task_dir = ctx.task_dir })
+                local store = frame.artifact_store(backend)
+                local rel, err = store:offload(sim, { name = "sim.json", format = "json" })
+                if not rel then error(err or "offload returned nil") end
+                return rel
+            end)
+            if ok_off then
+                sim_path = ctx.task_dir .. "/" .. rel_or_err
+                sim_summary = frame.summarize(
+                    {
+                        equilibrium = equilibrium,
+                        survival_rate = survival_rate,
+                        median_revenue = median_revenue,
+                        median_users = median_users,
+                    },
+                    { format = "json", max_chars = 300 }
+                )
+                sim_inline = nil
+                alc.log("info", "simulator: simulation offloaded to " .. sim_path)
+            else
+                alc.log("warn", "simulator: offload failed, simulation inline: " .. tostring(rel_or_err))
+            end
+        else
+            alc.log("warn", "simulator: swarm_frame artifact_store unavailable; simulation inline")
+        end
+    end
+
     ctx.result = {
         incumbent = incumbent,
-        simulation = sim,
+        simulation = sim_inline,
         equilibrium = equilibrium,
         sim_params = params,
         kill = kill,
@@ -198,6 +232,8 @@ function M.run(ctx)
             "survival_rate=%.1f%% < threshold=%.1f%%",
             survival_rate * 100, cfg.kill_threshold * 100
         ) or nil,
+        sim_path = sim_path,
+        sim_summary = sim_summary,
     }
 
     return ctx

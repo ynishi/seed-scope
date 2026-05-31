@@ -214,6 +214,11 @@ local function install_stubs(store)
         make_dispatcher = function(_opts)
             return function() return "mock_dispatch" end
         end,
+        resolve_task_dir = function(_opts)
+            -- E2E non-LLM mock: skip filesystem mkdir, return nil so orch
+            -- falls back to inline (no offload, no file I/O).
+            return nil, "stub: task_dir disabled in non-LLM spec"
+        end,
     }
 
     package.loaded["flow"] = {
@@ -273,13 +278,14 @@ describe("seed_scope_orch E2E (evaluate mode, non-LLM)", function()
 
         assert(ctx.result, "result missing")
         assert(ctx.result.mode == "evaluate", "mode should be evaluate")
-        assert(ctx.result.eval_results, "eval_results missing")
-        assert(#ctx.result.eval_results > 0, "should have at least 1 eval result")
+        assert(ctx.result.entries, "entries missing")
+        assert(#ctx.result.entries > 0, "should have at least 1 entry")
+        assert(ctx.result.counts, "counts missing")
+        assert(type(ctx.result.counts.evaluated) == "number", "counts.evaluated should be number")
 
-        local first = ctx.result.eval_results[1]
-        assert(first.result, "first eval result missing")
-        assert(first.result.decision == "SCAFFOLD" or first.result.decision == "KILL",
-            "decision should be SCAFFOLD or KILL, got: " .. tostring(first.result.decision))
+        local first = ctx.result.entries[1]
+        assert(first.decision == "SCAFFOLD" or first.decision == "KILL",
+            "decision should be SCAFFOLD or KILL, got: " .. tostring(first.decision))
     end)
 
     it("produces simulation results with equilibrium", function()
@@ -291,8 +297,11 @@ describe("seed_scope_orch E2E (evaluate mode, non-LLM)", function()
             namespace = "e2e_test_sim",
         })
 
-        assert(ctx.result.sim_survivors or ctx.result.killed,
-            "should have sim_survivors or killed")
+        assert(ctx.result.entries, "entries missing")
+        assert(ctx.result.counts, "counts missing")
+        -- sim runs only on SCAFFOLD; killed entries have sim_kill=nil
+        assert(ctx.result.counts.sim_survive ~= nil or ctx.result.counts.killed ~= nil,
+            "should have sim_survive or killed counts")
     end)
 
     it("produces design specs for surviving ideas", function()
@@ -304,8 +313,15 @@ describe("seed_scope_orch E2E (evaluate mode, non-LLM)", function()
             namespace = "e2e_test_design",
         })
 
-        if ctx.result.sim_survivors and #ctx.result.sim_survivors > 0 then
-            assert(ctx.result.designs, "designs should exist when ideas survive simulation")
+        if (ctx.result.counts and ctx.result.counts.sim_survive or 0) > 0 then
+            -- At least one entry should carry design output (spec_path or spec_summary or design_decision)
+            local has_design = false
+            for _, e in ipairs(ctx.result.entries) do
+                if e.spec_path or e.spec_summary or e.design_decision then
+                    has_design = true; break
+                end
+            end
+            assert(has_design, "at least one entry should carry design output")
         end
     end)
 end)

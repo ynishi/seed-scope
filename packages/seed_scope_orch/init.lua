@@ -92,12 +92,18 @@ local function handle_evaluate(ctx, _spec)
     local survivors = ctx.state:get("survivors") or {}
     if #survivors == 0 then return "DONE path=ok" end
 
+    local task_dir = ctx.state:get("task_dir")
+
     local results = {}
     for i, candidate in ipairs(survivors) do
         alc.log("info", string.format("seed_scope_orch/evaluate: %d/%d", i, #survivors))
+        -- Assign stable idea_id (survivor index) for cross-stage spec_<idea_id>/ alignment
+        candidate._idea_id = i
+        local idea_task_dir = task_dir and (task_dir .. "/spec_" .. i) or nil
         local eval_ctx = evaluator.run({
             task = candidate.text,
             reference_bundle = candidate.reference_bundle,
+            task_dir = idea_task_dir,
         })
         results[#results + 1] = { candidate = candidate, result = eval_ctx.result }
     end
@@ -122,12 +128,17 @@ local function handle_simulate(ctx, _spec)
     local scaffolded = ctx.state:get("scaffolded") or {}
     if #scaffolded == 0 then return "DONE path=ok" end
 
+    local task_dir = ctx.state:get("task_dir")
+
     local sim_survivors = {}
     for i, entry in ipairs(scaffolded) do
         alc.log("info", string.format("seed_scope_orch/simulate: %d/%d", i, #scaffolded))
+        local idea_id = entry.candidate._idea_id or i
+        local idea_task_dir = task_dir and (task_dir .. "/spec_" .. idea_id) or nil
         local sim_ctx = simulator.run({
             task = entry.candidate.text,
             metrics = entry.result and entry.result.metrics or {},
+            task_dir = idea_task_dir,
         })
         if sim_ctx.result and sim_ctx.result.kill then
             alc.log("info", string.format("seed_scope_orch/simulate: KILL — %s", sim_ctx.result.kill_reason or ""))
@@ -150,51 +161,15 @@ local function handle_design(ctx, _spec)
     local sim_survivors = ctx.state:get("sim_survivors") or {}
     if #sim_survivors == 0 then return "DONE path=ok" end
 
-    -- Resolve task_dir for spec file offloading (avoid MCP result overflow).
-    -- Priority:
-    --   1. ctx.project_root (caller explicit — most reliable)
-    --   2. ALC_PROJECT_ROOT env var (algocline / shell environment)
-    --   3. PWD (runtime CWD — best-effort for agent contexts)
-    --   4. nil → inline fallback (file write skipped, warn logged)
-    -- $HOME-based heuristic was removed: it breaks on other users' machines.
-    local task_id   = ctx.state:get("task_id") or "seedscope-default"
-    local namespace = ctx.state:get("namespace") or "default"
-    local project_root = ctx.project_root
-    if not project_root or project_root == "" then
-        project_root = os.getenv("ALC_PROJECT_ROOT")
-    end
-    if not project_root or project_root == "" then
-        project_root = os.getenv("PWD")
-        if project_root and project_root ~= "" then
-            alc.log("info", "seed_scope_orch/design: ctx.project_root unset, using PWD: " .. project_root)
-        end
-    end
-    if not project_root or project_root == "" then
-        alc.log("warn", "seed_scope_orch/design: ctx.project_root unset and no fallback env available; spec will be inline")
-        project_root = nil
-    end
-
-    -- Build task_dir: {project_root}/workspace/tasks/{task_id}-{namespace}/
-    -- Skip when project_root is unavailable (all fallbacks exhausted above).
-    local task_dir
-    if project_root then
-        local candidate = project_root .. "/workspace/tasks/" .. task_id .. "-" .. namespace
-        local mkdir_ok = os.execute("mkdir -p '" .. candidate .. "'")
-        if mkdir_ok then
-            task_dir = candidate
-        else
-            alc.log("warn", "seed_scope_orch/design: mkdir failed for " .. candidate .. "; spec will be inline")
-        end
-    end
+    -- task_dir is resolved once at M.run entry via swarm_frame_algocline.resolve_task_dir
+    -- and stored in fs:set("task_dir"). Per-idea sub-dirs (spec_<i>/) are created on demand.
+    local task_dir = ctx.state:get("task_dir")
 
     local designs = {}
     for i, entry in ipairs(sim_survivors) do
         alc.log("info", string.format("seed_scope_orch/design: %d/%d", i, #sim_survivors))
-        -- Pass idea-specific task_dir to designer so each spec gets its own file.
-        local idea_task_dir = task_dir and (task_dir .. "/spec_" .. i) or nil
-        if idea_task_dir then
-            os.execute("mkdir -p '" .. idea_task_dir .. "'")
-        end
+        local idea_id = entry.candidate._idea_id or i
+        local idea_task_dir = task_dir and (task_dir .. "/spec_" .. idea_id) or nil
         local design_ctx = designer.run({
             task     = entry.candidate.text,
             task_dir = idea_task_dir,
@@ -372,6 +347,22 @@ function M.run(ctx)
     fs:set("task_id", task_id)
     fs:set("namespace", ctx.namespace)
 
+    -- Resolve task_dir once at orch entry (avoid per-handler duplication).
+    -- Stored in both frame state (for handler access) and flow state.data
+    -- (Frame convention: Card metadata auto-attach via swarm_frame_algocline).
+    local task_dir, td_err = adapter.resolve_task_dir({
+        project_root = ctx.project_root,
+        task_id      = task_id,
+        namespace    = ctx.namespace,
+    })
+    if task_dir then
+        fs:set("task_dir", task_dir)
+        st.data.task_dir = task_dir
+        alc.log("info", "seed_scope_orch: task_dir=" .. task_dir)
+    else
+        alc.log("warn", "seed_scope_orch: task_dir unresolved (" .. tostring(td_err) .. "); offload will fall back to inline")
+    end
+
     -- Resume: restore completed steps from flow state
     if st.data and st.data.completed_steps then
         for _, step in ipairs(st.data.completed_steps) do
@@ -402,15 +393,64 @@ function M.run(ctx)
     st.data.completed_steps = completed
     flow.state_save(st)
 
-    -- Collect results from state
+    -- Build slim entries array (per-idea summary with file paths).
+    -- Avoids MCP result overflow: heavy payloads (raw_scores, simulation, spec)
+    -- are offloaded to {task_dir}/spec_<idea_id>/ by evaluator/simulator/designer.
+    local eval_results  = fs:get("eval_results") or {}
+    local sim_survivors = fs:get("sim_survivors") or {}
+    local designs       = fs:get("designs") or {}
+
+    local sim_by_id, design_by_id = {}, {}
+    for _, s in ipairs(sim_survivors) do
+        local id = s.candidate and s.candidate._idea_id
+        if id then sim_by_id[id] = s end
+    end
+    for _, d in ipairs(designs) do
+        local id = d.candidate and d.candidate._idea_id
+        if id then design_by_id[id] = d end
+    end
+
+    local entries = {}
+    for _, r in ipairs(eval_results) do
+        local id = r.candidate and r.candidate._idea_id
+        local sim_entry = id and sim_by_id[id]
+        local design_entry = id and design_by_id[id]
+        local er = r.result or {}
+        local sim_r = sim_entry and sim_entry.sim_result or {}
+        local des = design_entry and design_entry.design or {}
+        entries[#entries + 1] = {
+            idea_id        = id,
+            idea_text      = r.candidate and r.candidate.text,
+            source         = r.candidate and r.candidate.source,
+            decision       = er.decision,
+            ev             = er.ev,
+            metrics        = er.metrics,
+            sample_count   = er.sample_count,
+            eval_path      = er.eval_path,
+            eval_summary   = er.eval_summary,
+            sim_kill       = sim_r.kill,
+            sim_kill_reason = sim_r.kill_reason,
+            sim_equilibrium = sim_r.equilibrium,
+            sim_path       = sim_r.sim_path,
+            sim_summary    = sim_r.sim_summary,
+            spec_path      = des.spec_path,
+            spec_summary   = des.spec_summary,
+            design_decision = des.decision and des.decision.recommendation and des.decision.recommendation.name,
+        }
+    end
+
     ctx.result = {
         mode = mode,
         screen_stats = fs:get("screen_stats"),
-        eval_results = fs:get("eval_results"),
-        scaffolded = fs:get("scaffolded"),
-        killed = fs:get("killed"),
-        sim_survivors = fs:get("sim_survivors"),
-        designs = fs:get("designs"),
+        entries = entries,
+        counts = {
+            evaluated   = #eval_results,
+            scaffolded  = #(fs:get("scaffolded") or {}),
+            killed      = #(fs:get("killed") or {}),
+            sim_survive = #sim_survivors,
+            designed    = #designs,
+        },
+        task_dir = fs:get("task_dir"),
         pipeline_status = ctx.result and ctx.result.status or "UNKNOWN",
     }
 

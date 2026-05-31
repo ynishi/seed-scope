@@ -224,15 +224,46 @@ function M.score_lens(ctx)
         end
     end
 
+    -- Offload raw_scores (panel debate per-lens samples) to file when
+    -- ctx.task_dir is provided. Avoids MCP result overflow when orch aggregates.
+    local eval_path, eval_summary, raw_scores_inline = nil, nil, valid_samples
+    if ctx.task_dir and type(ctx.task_dir) == "string" and #ctx.task_dir > 0 then
+        local ok_sf, frame = pcall(require, "swarm_frame")
+        if ok_sf and frame.artifact_store and frame.backend_artifact_file then
+            local ok_off, rel_or_err = pcall(function()
+                local backend = frame.backend_artifact_file({ task_dir = ctx.task_dir })
+                local store = frame.artifact_store(backend)
+                local rel, err = store:offload(valid_samples, { name = "eval.json", format = "json" })
+                if not rel then error(err or "offload returned nil") end
+                return rel
+            end)
+            if ok_off then
+                eval_path = ctx.task_dir .. "/" .. rel_or_err
+                eval_summary = frame.summarize(
+                    { decision = decision, ev = ev, sample_count = #valid_samples },
+                    { format = "json", max_chars = 300 }
+                )
+                raw_scores_inline = nil
+                alc.log("info", "evaluator: raw_scores offloaded to " .. eval_path)
+            else
+                alc.log("warn", "evaluator: offload failed, raw_scores inline: " .. tostring(rel_or_err))
+            end
+        else
+            alc.log("warn", "evaluator: swarm_frame artifact_store unavailable; raw_scores inline")
+        end
+    end
+
     ctx.result = {
         decision = decision,
         expected_value = ev,
         metrics = metrics,
         kill_reasons = kill_reasons,
         hard_gate_fails = hard_gate_fails,
-        raw_scores = valid_samples,
+        raw_scores = raw_scores_inline,
         sample_count = #valid_samples,
         ev = ev,
+        eval_path = eval_path,
+        eval_summary = eval_summary,
     }
 
     alc.log("info", string.format(
@@ -402,6 +433,7 @@ function M.run(ctx)
         idea = idea .. "\n\nDEBATE SYNTHESIS:\n" .. synthesis,
         reference_bundle = ctx.reference_bundle,
         kill_threshold = kill_threshold,
+        task_dir = ctx.task_dir,  -- propagate for raw_scores offload
     })
 
     ctx.result = score_ctx.result
