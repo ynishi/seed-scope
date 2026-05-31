@@ -105,7 +105,25 @@ local function handle_evaluate(ctx, _spec)
             reference_bundle = candidate.reference_bundle,
             task_dir = idea_task_dir,
         })
-        results[#results + 1] = { candidate = candidate, result = eval_ctx.result }
+        local er = eval_ctx.result or {}
+        -- Slim eval state: drop raw_scores inline (offloaded to eval.json).
+        -- Keep only fields the orch + downstream stages need.
+        results[#results + 1] = {
+            candidate = candidate,
+            result = {
+                decision        = er.decision,
+                ev              = er.ev,
+                expected_value  = er.expected_value,
+                metrics         = er.metrics,
+                kill_reasons    = er.kill_reasons,
+                hard_gate_fails = er.hard_gate_fails,
+                sample_count    = er.sample_count,
+                eval_path       = er.eval_path,
+                eval_summary    = er.eval_summary,
+                -- raw_scores only kept when offload failed (inline fallback)
+                raw_scores      = er.eval_path == nil and er.raw_scores or nil,
+            },
+        }
     end
 
     local scaffolded, killed = {}, {}
@@ -140,14 +158,26 @@ local function handle_simulate(ctx, _spec)
             metrics = entry.result and entry.result.metrics or {},
             task_dir = idea_task_dir,
         })
-        if sim_ctx.result and sim_ctx.result.kill then
-            alc.log("info", string.format("seed_scope_orch/simulate: KILL — %s", sim_ctx.result.kill_reason or ""))
+        local sr = sim_ctx.result or {}
+        if sr.kill then
+            alc.log("info", string.format("seed_scope_orch/simulate: KILL — %s", sr.kill_reason or ""))
             entry.result.decision = "KILL"
         else
+            -- Slim sim state: drop simulation inline (offloaded to sim.json).
             sim_survivors[#sim_survivors + 1] = {
                 candidate = entry.candidate,
                 eval_result = entry.result,
-                sim_result = sim_ctx.result,
+                sim_result = {
+                    incumbent     = sr.incumbent,
+                    equilibrium   = sr.equilibrium,
+                    sim_params    = sr.sim_params,
+                    kill          = sr.kill,
+                    kill_reason   = sr.kill_reason,
+                    sim_path      = sr.sim_path,
+                    sim_summary   = sr.sim_summary,
+                    -- simulation only kept when offload failed (inline fallback)
+                    simulation    = sr.sim_path == nil and sr.simulation or nil,
+                },
             }
         end
     end
@@ -175,20 +205,25 @@ local function handle_design(ctx, _spec)
             task_dir = idea_task_dir,
         })
         local dr = design_ctx.result or {}
+        -- Slim design: keep only file paths + summaries. Heavy fields
+        -- (competitors / weakness_analysis / features / decision full debate)
+        -- are offloaded to {idea_task_dir}/design.json by designer.run when
+        -- task_dir is provided. Inline fallback fields are dropped here to
+        -- prevent frame state bloat (alc_continue intermediate return).
         designs[#designs + 1] = {
             candidate    = entry.candidate,
-            eval_result  = entry.eval_result,
-            sim_result   = entry.sim_result,
-            -- Slim design: drop full spec inline; carry path + summary instead.
+            -- Drop heavy eval_result / sim_result inline carry; per-idea
+            -- entries[] (final ctx.result) already pulls slim metrics + paths.
             design = {
-                competitors       = dr.competitors,
-                weakness_analysis = dr.weakness_analysis,
-                features          = dr.features,
-                decision          = dr.decision,
-                spec_path         = dr.spec_path,
-                spec_summary      = dr.spec_summary,
+                competitors_slim = dr.competitors_slim,
+                features_slim    = dr.features_slim,
+                decision_slim    = dr.decision_slim,
+                design_path      = dr.design_path,
+                design_summary   = dr.design_summary,
+                spec_path        = dr.spec_path,
+                spec_summary     = dr.spec_summary,
                 -- inline spec only present when file write failed (fallback)
-                spec              = dr.spec,
+                spec             = dr.spec,
             },
         }
     end
@@ -418,24 +453,28 @@ function M.run(ctx)
         local er = r.result or {}
         local sim_r = sim_entry and sim_entry.sim_result or {}
         local des = design_entry and design_entry.design or {}
+        local dec_slim = des.decision_slim or {}
         entries[#entries + 1] = {
-            idea_id        = id,
-            idea_text      = r.candidate and r.candidate.text,
-            source         = r.candidate and r.candidate.source,
-            decision       = er.decision,
-            ev             = er.ev,
-            metrics        = er.metrics,
-            sample_count   = er.sample_count,
-            eval_path      = er.eval_path,
-            eval_summary   = er.eval_summary,
-            sim_kill       = sim_r.kill,
-            sim_kill_reason = sim_r.kill_reason,
-            sim_equilibrium = sim_r.equilibrium,
-            sim_path       = sim_r.sim_path,
-            sim_summary    = sim_r.sim_summary,
-            spec_path      = des.spec_path,
-            spec_summary   = des.spec_summary,
-            design_decision = des.decision and des.decision.recommendation and des.decision.recommendation.name,
+            idea_id          = id,
+            idea_text        = r.candidate and r.candidate.text,
+            source           = r.candidate and r.candidate.source,
+            decision         = er.decision,
+            ev               = er.ev,
+            metrics          = er.metrics,
+            sample_count     = er.sample_count,
+            eval_path        = er.eval_path,
+            eval_summary     = er.eval_summary,
+            sim_kill         = sim_r.kill,
+            sim_kill_reason  = sim_r.kill_reason,
+            sim_equilibrium  = sim_r.equilibrium,
+            sim_path         = sim_r.sim_path,
+            sim_summary      = sim_r.sim_summary,
+            spec_path        = des.spec_path,
+            spec_summary     = des.spec_summary,
+            design_path      = des.design_path,
+            design_summary   = des.design_summary,
+            design_decision  = dec_slim.recommendation_name,
+            design_confidence = dec_slim.confidence,
         }
     end
 

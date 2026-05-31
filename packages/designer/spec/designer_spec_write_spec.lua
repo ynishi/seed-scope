@@ -150,4 +150,68 @@ describe("designer spec-write (non-LLM)", function()
         assert(ctx.result.spec_path == nil,
             "spec_path should be nil for inline fallback, got: " .. tostring(ctx.result.spec_path))
     end)
+
+    it("offloads design payload (competitors/decision/etc) to design.json", function()
+        install_designer_stubs()
+        local tmp = "/tmp/seedscope_designtest_" .. tostring(os.time())
+        os.execute("mkdir -p " .. tmp)
+
+        local designer = require("designer")
+        local ctx = designer.run({
+            task     = "Browser extension that highlights dark patterns",
+            task_dir = tmp,
+        })
+
+        -- design_path is set (file written) and design_summary is non-empty
+        assert(type(ctx.result.design_path) == "string",
+            "design_path should be a string, got: " .. type(ctx.result.design_path))
+        assert(ctx.result.design_path:match("design%.json$"),
+            "design_path should end with design.json, got: " .. ctx.result.design_path)
+        assert(type(ctx.result.design_summary) == "string",
+            "design_summary should be a string")
+
+        -- file exists and non-empty
+        local fh = io.open(ctx.result.design_path, "r")
+        assert(fh ~= nil, "design.json should exist at: " .. ctx.result.design_path)
+        local content = fh:read("*a")
+        fh:close()
+        assert(#content > 0, "design.json should be non-empty")
+
+        -- slim fields are emitted
+        assert(type(ctx.result.decision_slim) == "table", "decision_slim should be a table")
+        assert(ctx.result.decision_slim.recommendation_name == "Focus MVP",
+            "decision_slim.recommendation_name should be Focus MVP")
+        assert(type(ctx.result.features_slim) == "table", "features_slim should be a table")
+        assert(ctx.result.features_slim.total_mvp_days == 8, "features_slim.total_mvp_days should be 8")
+        assert(type(ctx.result.competitors_slim) == "table", "competitors_slim should be a table")
+        assert(ctx.result.competitors_slim.count == 1, "competitors_slim.count should be 1")
+
+        -- heavy inline fields dropped when offload succeeds
+        assert(ctx.result.decision == nil, "decision should be nil after offload")
+        assert(ctx.result.competitors == nil, "competitors should be nil after offload")
+        assert(ctx.result.weakness_analysis == nil, "weakness_analysis should be nil after offload")
+        assert(ctx.result.features == nil, "features should be nil after offload")
+
+        -- cleanup
+        os.remove(ctx.result.design_path)
+        os.remove(ctx.result.spec_path)
+        os.execute("rmdir " .. tmp)
+    end)
+
+    it("falls back to inline design payload when task_dir is nil", function()
+        install_designer_stubs()
+
+        local designer = require("designer")
+        local ctx = designer.run({
+            task = "Slack bot that auto-summarizes threads",
+        })
+
+        -- inline fallback: heavy fields present, design_path nil
+        assert(ctx.result.design_path == nil, "design_path should be nil for inline fallback")
+        assert(ctx.result.decision ~= nil, "decision should be present for inline fallback")
+        assert(ctx.result.competitors ~= nil, "competitors should be present for inline fallback")
+        -- slim fields always emitted (caller-side stable contract)
+        assert(type(ctx.result.decision_slim) == "table", "decision_slim should always be emitted")
+        assert(type(ctx.result.features_slim) == "table", "features_slim should always be emitted")
+    end)
 end)

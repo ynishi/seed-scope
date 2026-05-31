@@ -278,14 +278,72 @@ function M.run(ctx)
         end
     end
 
+    -- Offload heavy intermediate artifacts (competitors / weakness_analysis /
+    -- features / decision = deliberate full debate transcript) to
+    -- {task_dir}/design.json. Frame state retains only slim summaries to
+    -- prevent MCP result overflow during alc_continue exchanges.
+    local design_path, design_summary = nil, nil
+    local rec = (decision and decision.recommendation) or {}
+    local decision_slim = {
+        recommendation_name = rec.name,
+        confidence          = decision and decision.confidence,
+        debate_outcome      = rec.debate_outcome,
+        ranking_wins        = rec.ranking_wins,
+    }
+    local features_slim = features and {
+        hygiene_count        = #(features.hygiene or {}),
+        differentiators_count = #(features.differentiators or {}),
+        total_mvp_days       = features.total_mvp_days,
+        recommended_stack    = features.recommended_stack,
+    } or nil
+    local competitors_slim = competitors and { count = #competitors } or nil
+
+    local td = ctx.task_dir
+    if td and type(td) == "string" and #td > 0 then
+        local ok_sf, frame = pcall(require, "swarm_frame")
+        if ok_sf and frame.artifact_store and frame.backend_artifact_file then
+            local payload = {
+                competitors       = competitors,
+                weakness_analysis = weakness_analysis,
+                features          = features,
+                decision          = decision,
+            }
+            local ok_off, rel_or_err = pcall(function()
+                local backend = frame.backend_artifact_file({ task_dir = td })
+                local store = frame.artifact_store(backend)
+                local rel, err = store:offload(payload, { name = "design.json", format = "json" })
+                if not rel then error(err or "offload returned nil") end
+                return rel
+            end)
+            if ok_off then
+                design_path = td .. "/" .. rel_or_err
+                design_summary = frame.summarize(decision_slim, { format = "json", max_chars = 300 })
+                alc.log("info", "designer: design payload offloaded to " .. design_path)
+            else
+                alc.log("warn", "designer: design offload failed, payload inline: " .. tostring(rel_or_err))
+            end
+        else
+            alc.log("warn", "designer: swarm_frame artifact_store unavailable; design payload inline")
+        end
+    end
+
+    -- When offload succeeded, drop the heavy inline fields. Otherwise keep
+    -- them inline as fallback (legacy behavior).
+    local emit_inline = (design_path == nil)
     ctx.result = {
-        competitors = competitors,
-        weakness_analysis = weakness_analysis,
-        features = features,
-        decision = decision,
-        spec = spec,           -- nil when spec_path is set; inline fallback otherwise
-        spec_path = spec_path,
-        spec_summary = spec_summary,
+        competitors       = emit_inline and competitors or nil,
+        weakness_analysis = emit_inline and weakness_analysis or nil,
+        features          = emit_inline and features or nil,
+        decision          = emit_inline and decision or nil,
+        -- Slim always-emitted fields
+        competitors_slim  = competitors_slim,
+        features_slim     = features_slim,
+        decision_slim     = decision_slim,
+        design_path       = design_path,
+        design_summary    = design_summary,
+        spec              = spec,
+        spec_path         = spec_path,
+        spec_summary      = spec_summary,
     }
 
     alc.log("info", "designer: complete")
